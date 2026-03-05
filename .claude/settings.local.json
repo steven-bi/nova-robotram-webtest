@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dart pub:*)",
+      "Bash(where dart)",
+      "Read(//c/Users/13397/AppData/Local/Programs//**)",
+      "Bash(cmd.exe:*)",
+      "Bash(echo:*)",
+      "Bash(printenv PATH:*)",
+      "Bash(curl:*)",
+      "Bash(choco:*)",
+      "Bash(powershell:*)",
+      "Bash(dart:*)",
+      "Bash(export:*)",
+      "Bash(DART=\"/c/Users/13397/AppData/Local/Microsoft/WinGet/Packages/Google.DartSDK_Microsoft.Winget.Source_8wekyb3d8bbwe/dart-sdk/bin/dart\")",
+      "Bash(for pkg in han_dog_brain han_dog frequency_watch skinny_dog_algebra)",
+      "Bash(do)",
+      "Read(//d/brainstem-master/**)",
+      "Bash(\"$DART\" pub get)",
+      "Bash(done)",
+      "Bash(grep:*)",
+      "Bash(\"$DART\" test:*)",
+      "Bash(\"$DART\" run:*)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Read(//c/Program Files/**)",
+      "Read(//usr/include/**)",
+      "Bash(find /usr -name \"stdlib.h\")",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(for pkg in han_dog_brain robo_device_proto robo_device han_dog)",
+      "Read(//d/brainstem-master/brainstem/**)"
+    ]
+  }
+}
