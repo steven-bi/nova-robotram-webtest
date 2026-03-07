@@ -1,0 +1,52 @@
+# Isaac Lab 源码（体积大，用官方仓库）
+IsaacLab/
+
+# ROS2 构建产物
+build/
+install/
+log/
+
+# 参考资料/大文件
+ref/
+zip_extracted/
+*.rar
+*.zip
+
+# 训练过程截图/视频（中间产物）
+frame_*.png
+v8*.png
+v8*.mp4
+pick_place_v*.mp4
+policy_video.mp4
+policy_animation.gif
+policy_composite.png
+policy_frames_composite.png
+training_result.png
+trajectory_data.json
+
+# 临时调试脚本
+debug_*.py
+check_*.py
+fix_*.py
+test_server.py
+final_fix.py
+final_test.py
+setup_server.py
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg-info/
+dist/
+
+# 环境
+.venv/
+venv/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Robot Arm Control</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: #eee; overflow: hidden; }
+#canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+canvas { display: block; }
+
+#panel {
+  position: absolute; top: 20px; left: 20px; z-index: 10;
+  background: rgba(22, 33, 62, 0.92); border-radius: 12px;
+  padding: 20px; width: 340px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  max-height: calc(100vh - 40px); overflow-y: auto;
+}
+#panel h2 { font-size: 18px; margin-bottom: 15px; color: #00d2ff;
+  border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+
+.joint-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: stretch; }
+.joint-left { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
+.joint-right { width: 128px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+.joint-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.joint-name { font-weight: bold; font-size: 14px; color: #00d2ff; }
+.joint-values { font-size: 12px; color: #aaa; }
+.joint-values .current { color: #888; }
+.joint-values .target { color: #ffd700; font-weight: bold; }
+.joint-btns { display: flex; gap: 4px; }
+.btn-en, .btn-zero {
+  flex: 1; padding: 4px 0; border: none; border-radius: 5px;
+  font-size: 11px; font-weight: bold; cursor: pointer;
+  transition: background 0.2s, color 0.2s; white-space: nowrap; text-align: center;
+}
+.btn-en.on  { background: #06d6a0; color: #111; }
+.btn-en.off { background: #444; color: #888; }
+.btn-zero   { background: #ff9500; color: #111; }
+.btn-zero:hover { background: #ffb340; }
+.angle-input {
+  width: 100%; padding: 4px 6px; border-radius: 5px; border: 1px solid #3a3a5a;
+  background: #2a2a4a; color: #ffd700; font-size: 13px; font-weight: bold;
+  text-align: center; outline: none; box-sizing: border-box;
+}
+.angle-input:focus { border-color: #00d2ff; }
+
+input[type=range] {
+  width: 100%; height: 6px; -webkit-appearance: none; appearance: none;
+  background: #2a2a4a; border-radius: 3px; outline: none; margin-top: 6px;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: #00d2ff; cursor: pointer;
+}
+
+.btn-row { display: flex; gap: 8px; margin-top: 18px; }
+.btn {
+  flex: 1; padding: 10px; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: bold; cursor: pointer;
+  transition: transform 0.1s, opacity 0.2s;
+}
+.btn:hover { transform: scale(1.03); }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.btn-read { background: #3a86ff; color: #fff; }
+.btn-exec { background: #06d6a0; color: #111; }
+.btn-stop { background: #ef476f; color: #fff; }
+.btn-enable { background: #ffd166; color: #111; }
+.btn-home { background: #9b5de5; color: #fff; }
+
+#status { margin-top: 12px; font-size: 12px; color: #aaa; min-height: 18px; }
+#progress-bar { margin-top: 8px; height: 4px; background: #2a2a4a; border-radius: 2px; overflow: hidden; }
+#progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #00d2ff, #06d6a0); transition: width 0.1s; }
+
+#log-panel {
+  margin-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 10px;
+}
+#log-panel h3 { font-size: 12px; color: #00d2ff; margin-bottom: 6px; letter-spacing: 0.5px; }
+#log-box {
+  height: 120px; overflow-y: auto; background: #0d0d1a;
+  border-radius: 6px; padding: 6px 8px;
+  font-size: 11px; font-family: 'Consolas', monospace;
+  display: flex; flex-direction: column-reverse;
+}
+.log-line { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap; }
+.log-line .ts { color: #555; margin-right: 6px; }
+.log-line.info  .msg { color: #aaa; }
+.log-line.ok    .msg { color: #06d6a0; }
+.log-line.warn  .msg { color: #ffd166; }
+.log-line.err   .msg { color: #ef476f; }
+.log-line.move  .msg { color: #00d2ff; }
+
+#info { position: absolute; bottom: 20px; left: 20px; z-index: 10; font-size: 11px; color: #555; }
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<div id="panel">
+  <h2>Robot Arm Control</h2>
+  <div id="joints"></div>
+  <div class="btn-row">
+    <button class="btn btn-read" onclick="readCurrent()">读取位置</button>
+    <button class="btn btn-exec" id="btn-exec" onclick="executeMove()">执行运动</button>
+    <button class="btn btn-stop" onclick="emergencyStop()">紧急停止</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-enable" onclick="reEnable()">全部上使能</button>
+    <button class="btn btn-home" onclick="goHome()">安全归位</button>
+  </div>
+  <div id="status">Loading 3D model...</div>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+  <div id="log-panel">
+    <h3>&#9654; 运动日志</h3>
+    <div id="log-box"></div>
+  </div>
+</div>
+
+<div id="info">Left drag: rotate | Right drag: pan | Scroll: zoom</div>
+
+<!-- Three.js r134 — last version with examples/js/ global scripts -->
+<script src="https://unpkg.com/three@0.134.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://unpkg.com/three@0.134.0/examples/js/loaders/STLLoader.js"></script>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────
+const JOINT_NAMES = ['1','2','3','4','5','6'];
+const JOINT_LABELS = ['J1 Base','J2 Shoulder','J3 Elbow','J4 Wrist1','J5 Wrist2','J6 Wrist3'];
+
+// URDF joint definitions (from arm.urdf)
+// Each: { origin: {xyz, rpy}, axis: [x,y,z], parent, child }
+const URDF_JOINTS = [
+  { name:'1', xyz:[0,0,0.1281],     rpy:[0,0,0],                       axis:[0,0,1] },
+  { name:'2', xyz:[0,0,0],          rpy:[-1.5708,0,3.1397],            axis:[0,0,1] },
+  { name:'3', xyz:[0.37425,0,0],    rpy:[0,0,-2.8166],                 axis:[0,0,1] },
+  { name:'4', xyz:[0.30395,0.00033,0], rpy:[0,0,-0.3307],              axis:[0,0,1] },
+  { name:'5', xyz:[0.080376,0.0018,-0.002], rpy:[-1.5708,-1.5689,0.0057], axis:[0,0,1] },
+  { name:'6', xyz:[0.002092,0.02993,0], rpy:[-1.5708,0,-0.0019],       axis:[0,0,1] },
+];
+
+const STL_FILES = ['0.STL','1.STL','2.STL','3.STL','4.STL','5.STL','6.STL'];
+const STL_COLORS = [0x6677aa, 0x7788bb, 0x8899cc, 0x7788bb, 0x8899cc, 0x7788bb, 0xeeeeee];
+
+// ── Three.js Scene ──────────────────────────────────────────────
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.01, 10);
+camera.position.set(0.8, 0.6, 0.8);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+container.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);  // r134 global
+controls.target.set(0, 0.3, 0);
+controls.update();
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(2, 3, 2);
+scene.add(dirLight);
+scene.add(new THREE.DirectionalLight(0xaaccff, 0.3).translateX(-1).translateY(2));
+
+// Grid
+scene.add(new THREE.GridHelper(2, 20, 0x333355, 0x222244));
+
+// ── Build kinematic chain ───────────────────────────────────────
+// We create a hierarchy of THREE.Group objects:
+//   baseGroup (link0 mesh)
+//     -> joint1Group (rotates around axis)
+//       -> link1Offset (origin transform + link1 mesh)
+//         -> joint2Group ...
+
+const jointGroups = [];  // groups that rotate for each joint
+const linkMeshes = [];   // loaded STL meshes
+
+// Root group (flips Z-up to Y-up)
+const rootGroup = new THREE.Group();
+rootGroup.rotation.x = -Math.PI / 2;
+scene.add(rootGroup);
+
+// Link 0 (base) - no joint, just mesh
+const link0Group = new THREE.Group();
+rootGroup.add(link0Group);
+
+// Build joint chain
+let parentGroup = link0Group;
+for (let i = 0; i < URDF_JOINTS.length; i++) {
+  const j = URDF_JOINTS[i];
+
+  // Origin offset group (translation + fixed rotation from URDF)
+  const originGroup = new THREE.Group();
+  originGroup.position.set(j.xyz[0], j.xyz[1], j.xyz[2]);
+
+  // Apply RPY rotation (roll-pitch-yaw = XYZ intrinsic = ZYX extrinsic)
+  const euler = new THREE.Euler(j.rpy[0], j.rpy[1], j.rpy[2], 'ZYX');
+  originGroup.setRotationFromEuler(euler);
+
+  parentGroup.add(originGroup);
+
+  // Joint rotation group (this is what we animate)
+  const jointGroup = new THREE.Group();
+  // Joint rotates around its axis (always Z in URDF for revolute)
+  jointGroups.push(jointGroup);
+  originGroup.add(jointGroup);
+
+  parentGroup = jointGroup;
+}
+
+// ── Load STL meshes ─────────────────────────────────────────────
+const stlLoader = new THREE.STLLoader();
+let loadedCount = 0;
+
+function loadSTL(index, parentGroup) {
+  stlLoader.load('/meshes/' + STL_FILES[index], function(geometry) {
+    const material = new THREE.MeshPhongMaterial({
+      color: STL_COLORS[index],
+      specular: 0x222233,
+      shininess: 40,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    parentGroup.add(mesh);
+    linkMeshes.push(mesh);
+
+    loadedCount++;
+    if (loadedCount === STL_FILES.length) {
+      setStatus('3D model loaded. Click "Read" to sync.');
+    }
+  });
+}
+
+// Link 0 mesh -> link0Group
+loadSTL(0, link0Group);
+
+// Link 1-6 meshes -> corresponding jointGroup
+for (let i = 0; i < jointGroups.length; i++) {
+  loadSTL(i + 1, jointGroups[i]);
+}
+
+// ── Update 3D model from slider values ──────────────────────────
+function updateRobotPreview() {
+  for (let i = 0; i < JOINT_NAMES.length; i++) {
+    const deg = parseFloat(sliderData[JOINT_NAMES[i]].slider.value);
+    const rad = deg * Math.PI / 180;
+    // Rotate around Z axis (URDF revolute joints use Z)
+    jointGroups[i].rotation.z = rad;
+  }
+}
+
+// ── Build UI sliders ────────────────────────────────────────────
+const sliderData = {};
+const jointsDiv = document.getElementById('joints');
+
+const enabledState = {};
+
+JOINT_NAMES.forEach(function(name, i) {
+  const row = document.createElement('div');
+  row.className = 'joint-row';
+  row.innerHTML =
+    '<div class="joint-left">' +
+      '<div class="joint-header">' +
+        '<span class="joint-name">' + JOINT_LABELS[i] + '</span>' +
+        '<span class="joint-values">' +
+          '<span class="current" id="cur-' + name + '">0.0\u00b0</span> \u2192 ' +
+          '<span class="target" id="tgt-' + name + '">0.0\u00b0</span>' +
+        '</span>' +
+      '</div>' +
+      '<input type="range" id="slider-' + name + '" min="-180" max="180" step="0.5" value="0">' +
+    '</div>' +
+    '<div class="joint-right">' +
+      '<div class="joint-btns">' +
+        '<button class="btn-zero" onclick="setZero(\'' + name + '\')">置为零位</button>' +
+        '<button class="btn-en off" id="en-' + name + '" onclick="toggleEnable(\'' + name + '\')">使能</button>' +
+      '</div>' +
+      '<input type="number" class="angle-input" id="num-' + name + '" min="-180" max="180" step="0.5" value="0">' +
+    '</div>';
+  jointsDiv.appendChild(row);
+
+  const slider = document.getElementById('slider-' + name);
+  sliderData[name] = { slider: slider, current: 0 };
+  enabledState[name] = false;
+
+  var numInput = document.getElementById('num-' + name);
+
+  slider.addEventListener('input', function() {
+    var deg = parseFloat(slider.value);
+    numInput.value = deg.toFixed(1);
+    document.getElementById('tgt-' + name).textContent = deg.toFixed(1) + '\u00b0';
+    updateRobotPreview();
+  });
+
+  function applyNumInput() {
+    var deg = parseFloat(numInput.value);
+    if (isNaN(deg)) return;
+    deg = Math.max(-180, Math.min(180, deg));
+    numInput.value = deg.toFixed(1);
+    slider.value = deg;
+    document.getElementById('tgt-' + name).textContent = deg.toFixed(1) + '\u00b0';
+    updateRobotPreview();
+  }
+  numInput.addEventListener('change', applyNumInput);
+  numInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') applyNumInput(); });
+});
+
+function setEnableBtn(name, on) {
+  enabledState[name] = on;
+  var btn = document.getElementById('en-' + name);
+  btn.className = 'btn-en ' + (on ? 'on' : 'off');
+  btn.textContent = on ? '已使能' : '使能';
+}
+
+function toggleEnable(name) {
+  var on = enabledState[name];
+  var url = on ? '/api/disable_motor' : '/api/enable_motor';
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: parseInt(name) }),
+  }).then(function(r) { return r.json(); })
+    .then(function(d) { setEnableBtn(name, d.enabled); })
+    .catch(function(e) { setStatus('使能切换失败: ' + e.message); });
+}
+
+function setZero(name) {
+  var label = 'J' + name;
+  if (!confirm('确认将 ' + label + ' 当前位置写为零点？\n此操作写入电机 flash，不可撤销。')) return;
+  fetch('/api/set_zero', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: parseInt(name) }),
+  }).then(function(r) { return r.json(); })
+    .then(function() {
+      setStatus(label + ' 零位已写入');
+      log(label + ' 零位写入完成', 'warn');
+      // 归零显示
+      sliderData[name].slider.value = 0;
+      sliderData[name].current = 0;
+      document.getElementById('cur-' + name).textContent = '0.0°';
+      document.getElementById('tgt-' + name).textContent = '0.0°';
+      updateRobotPreview();
+    })
+    .catch(function(e) { setStatus('清零失败: ' + e.message); });
+}
+
+function refreshMotorStates() {
+  fetch('/api/motor_states', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      JOINT_NAMES.forEach(function(name) {
+        if (data[name] !== undefined) setEnableBtn(name, data[name]);
+      });
+    }).catch(function(){});
+}
+
+// ── Log ─────────────────────────────────────────────────────────
+function log(msg, type) {
+  type = type || 'info';
+  var box = document.getElementById('log-box');
+  var now = new Date();
+  var ts = now.toTimeString().slice(0,8);
+  var line = document.createElement('div');
+  line.className = 'log-line ' + type;
+  line.innerHTML = '<span class="ts">' + ts + '</span><span class="msg">' + msg + '</span>';
+  box.insertBefore(line, box.firstChild);
+  // 最多保留 80 条
+  while (box.children.length > 80) box.removeChild(box.lastChild);
+}
+
+// ── API functions ───────────────────────────────────────────────
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+function setProgress(pct) { document.getElementById('progress-fill').style.width = pct + '%'; }
+
+function readCurrent() {
+  setStatus('Reading...');
+  fetch('/api/read', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var parts = [];
+      JOINT_NAMES.forEach(function(name) {
+        var rad = data[name] || 0;
+        var deg = rad * 180 / Math.PI;
+        sliderData[name].slider.value = deg.toFixed(1);
+        sliderData[name].current = deg;
+        document.getElementById('cur-' + name).textContent = deg.toFixed(1) + '\u00b0';
+        document.getElementById('tgt-' + name).textContent = deg.toFixed(1) + '\u00b0';
+        document.getElementById('num-' + name).value = deg.toFixed(1);
+        parts.push('J' + name + ':' + deg.toFixed(1) + '\u00b0');
+      });
+      updateRobotPreview();
+      setStatus('Synced to current positions');
+      log('读取位置 \u2192 ' + parts.join('  '), 'info');
+    })
+    .catch(function(e) { setStatus('Read error: ' + e.message); log('读取失败: ' + e.message, 'err'); });
+}
+
+function executeMove() {
+  var btn = document.getElementById('btn-exec');
+  btn.disabled = true;
+  setProgress(0);
+
+  var targets = {};
+  var movingJoints = [];
+  JOINT_NAMES.forEach(function(name) {
+    var deg = parseFloat(sliderData[name].slider.value);
+    targets[name] = deg * Math.PI / 180;
+    var diff = Math.abs(deg - sliderData[name].current);
+    if (diff > 0.5) movingJoints.push('J' + name + '(' + (deg >= 0 ? '+' : '') + deg.toFixed(1) + '\u00b0)');
+  });
+
+  if (movingJoints.length === 0) {
+    log('目标与当前位置相同，无需运动', 'warn');
+    setStatus('No movement needed.');
+    btn.disabled = false;
+    return;
+  }
+  log('开始运动 \u2192 ' + movingJoints.join('  '), 'move');
+  setStatus('Moving...');
+  fetch('/api/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(targets),
+  }).then(function() {
+    var duration = 2500;
+    var start = Date.now();
+    var poll = setInterval(function() {
+      var elapsed = Date.now() - start;
+      setProgress(Math.min(100, elapsed / duration * 100));
+
+      fetch('/api/read', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          JOINT_NAMES.forEach(function(name) {
+            var rad = data[name] || 0;
+            var deg = rad * 180 / Math.PI;
+            sliderData[name].current = deg;
+            document.getElementById('cur-' + name).textContent = deg.toFixed(1) + '\u00b0';
+            sliderData[name].slider.value = deg.toFixed(1);
+            document.getElementById('num-' + name).value = deg.toFixed(1);
+            document.getElementById('tgt-' + name).textContent = deg.toFixed(1) + '\u00b0';
+            updateRobotPreview();
+          });
+        }).catch(function(){});
+
+      if (elapsed >= duration) {
+        clearInterval(poll);
+        setProgress(100);
+        setStatus('Move complete!');
+        log('运动完成 \u2714', 'ok');
+        btn.disabled = false;
+      }
+    }, 250);
+  }).catch(function(e) {
+    setStatus('Error: ' + e.message);
+    btn.disabled = false;
+  });
+}
+
+function emergencyStop() {
+  fetch('/api/stop', { method: 'POST' })
+    .then(function() {
+      setStatus('EMERGENCY STOP - motors disabled');
+      setProgress(0);
+      document.getElementById('btn-exec').disabled = false;
+      JOINT_NAMES.forEach(function(n) { setEnableBtn(n, false); });
+      log('紧急停止！所有电机失能', 'err');
+    })
+    .catch(function(e) { setStatus('Stop error: ' + e.message); log('停止失败: ' + e.message, 'err'); });
+}
+
+function goHome() {
+  setStatus('归位中...');
+  log('安全归位 → 运动到自然垂落位置', 'warn');
+  fetch('/api/home', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var duration = 2500, start = Date.now();
+      document.getElementById('btn-exec').disabled = true;
+      var poll = setInterval(function() {
+        var elapsed = Date.now() - start;
+        setProgress(Math.min(100, elapsed / duration * 100));
+        fetch('/api/read', { method: 'POST' })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            JOINT_NAMES.forEach(function(name) {
+              var deg = (data[name] || 0) * 180 / Math.PI;
+              sliderData[name].current = deg;
+              sliderData[name].slider.value = deg.toFixed(1);
+              document.getElementById('num-' + name).value = deg.toFixed(1);
+              document.getElementById('cur-' + name).textContent = deg.toFixed(1) + '\u00b0';
+              document.getElementById('tgt-' + name).textContent = deg.toFixed(1) + '\u00b0';
+            });
+            updateRobotPreview();
+          }).catch(function(){});
+        if (elapsed >= duration) {
+          clearInterval(poll);
+          setProgress(100);
+          setStatus('已归位，可安全断使能');
+          log('归位完成 \u2714 现在可以按 STOP 断使能', 'ok');
+          document.getElementById('btn-exec').disabled = false;
+        }
+      }, 250);
+    })
+    .catch(function(e) { setStatus('归位失败: ' + e.message); log('归位失败: ' + e.message, 'err'); });
+}
+
+function reEnable() {
+  fetch('/api/enable', { method: 'POST' })
+    .then(function() {
+      setStatus('Motors re-enabled');
+      JOINT_NAMES.forEach(function(n) { setEnableBtn(n, true); });
+      log('全部电机重新上使能', 'ok');
+      readCurrent();
+    })
+    .catch(function(e) { setStatus('Enable error: ' + e.message); log('使能失败: ' + e.message, 'err'); });
+}
+
+// 页面加载后查一次电机状态
+refreshMotorStates();
+
+// ── Render loop ─────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', function() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<launch>
+    <node 
+        pkg="pkg_robotarm_py" 
+        exec="Publisher" 
+        name="publisher_node"
+        output="screen"/>
+    
+    <node 
+        pkg="pkg_robotarm_py" 
+        exec="Subscriber" 
+        name="subscriber_node"
+        output="screen"/>
+</launch>
