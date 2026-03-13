@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Videos (large binary files)
+*.mp4
+*.avi
+*.mov
+
+# Isaac Sim / Isaac Lab generated assets
+*.usd
+*.usdz
+logs/
+logs_her/
+*.log
+
+# Checkpoints & model weights
+*.pt
+*.pth
+*.ckpt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Null / temp
+null
+*.tmp
+
+# Claude Code local settings
+.claude/
